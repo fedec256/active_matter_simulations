@@ -86,10 +86,10 @@ def simulate_rt_ou_vectorized_with_potential(
 
         trajectories[:, t] = x
 
-        final_time = n_steps * dt #final time of simulation
-        nan_mask = np.isnan(first_passage_times) #those who did'nt escape
-        first_passage_times[nan_mask] = final_time+dt #a time of escape greather than final
-        #time tells you the particle never escaped. 
+    final_time = n_steps * dt #final time of simulation
+    nan_mask = np.isnan(first_passage_times) #those who did'nt escape
+    first_passage_times[nan_mask] = final_time+dt #a time of escape greather than final
+    #time tells you the particle never escaped. 
 
     return trajectories, first_passage_times, escaped
 
