@@ -55,7 +55,6 @@ def simulate_rt_ou_vectorized_with_potential(
 
     for t in range(1, n_steps + 1):
         eta_ou = np.random.randn(n_traj)
-        #eta_thermal = np.random.randn(n_traj)
 
         x_old = x.copy()
 
@@ -89,18 +88,8 @@ def simulate_rt_ou_vectorized_with_potential(
 
     return trajectories, first_passage_times, escaped
 
-def run_simulation(
-#        path, #Don't give a path, let the implementation infer it 
-        V_run = 8.5, #scape velocity
-        dt = 0.001, #delta t
-        N_steps = 500000, #number of steps
-        N_traj = 250, #number of trajectories
-        x0 = 0.0, #starting position
-        T = 1.0, #memory time
-        v0 = 0.1, #initial tumbling rate
-        alpha_tumbling = 0.5, #the alpha parameter controlling the change in tumbling rate (ornstein-uhlenbeck) 
-        alpha_potential = 0.01, #the alpha parameter to tune the height of the barrier
-        omega0 = 1, #the curvature of the potential
+def run_simulation(**params
+#        path, #Don't give a path, let the implementation infer it
 ):
     print("Runnning simulation")
 
@@ -114,6 +103,18 @@ def run_simulation(
     file_name = f'simulation{timestamp}.npz'
     file_to_save = os.path.join(output_dir, file_name)
 
+    #unpack params
+    N_traj = params["N_traj"] #number of trajectories
+    N_steps = params["N_steps"] #number of steps   
+    V_run = params["V_run"] #scape velocity
+    dt = params["dt"] #delta t
+    x0 = params["x0"] #starting position
+    T = params["T"] #memory time
+    v0 = params["v0"] #initial tumbling rate
+    alpha_tumbling = params["alpha_tumbling"] #the alpha parameter controlling the change in tumbling rate (ornstein-uhlenbeck) 
+    alpha_potential = params["alpha_potential"] #the alpha parameter to tune the height of the barrier
+    omega0 = params["omega0"] #the curvature of the potential
+
     #Simulation!! A single simulation, because ram issues
     #Maybe parallel can be used in the future? Or a function that calls this one several times
     trajectories, scape_times, escaped_particles = simulate_rt_ou_vectorized_with_potential(N_traj, N_steps, V_run, dt, x0, T, v0, alpha_tumbling, alpha_potential, omega0)
@@ -121,20 +122,34 @@ def run_simulation(
     time = np.arange(trajectories.shape[1]) * dt
 
     np.savez(file_to_save, 
-#            trajectories = trajectories,
+#            trajectories = trajectories, #this was making the npz of huge size, don't save
             msd_t = msd_t,
             time = time,
             scape_times = scape_times,
             escaped_particles = escaped_particles,
-            params=np.array([
-                     N_traj, N_steps, V_run, dt, x0,
-                     T, v0, alpha_tumbling, alpha_potential, omega0
-                                                                    ]))
+            params_keys = np.array(list(params.keys())),
+            params_values = np.array(list(params.values()))
+    )
+#            params=np.array([
+#                    N_traj, N_steps, V_run, dt, x0,
+#                     T, v0, alpha_tumbling, alpha_potential, omega0
+#                                                                    ]))
     print(f"Saved to {file_to_save}")
     
+def run_batch(param_name, values, **base_params):
+    print(f"Running batch over {param_name}: {values}")
+
+    for v in values:
+        params = base_params.copy()
+        params[param_name] = v
+        print(f"\n--- Running {param_name} = {v} ---")
+        run_simulation(**params)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run RT-OU simulations with potential barrier.")
 
+    #default values --> the particles escape the potential with enough steps
     parser.add_argument("--N_traj", type=int, default=250)
     parser.add_argument("--N_steps", type=int, default=500000)
     parser.add_argument("--V_run", type=float, default=8.5)
@@ -146,17 +161,25 @@ if __name__ == "__main__":
     parser.add_argument("--alpha_potential", type=float, default=0.01)
     parser.add_argument("--omega0", type=float, default=1.0)
 
+    #batch parameters (vary one param at a time)
+    parser.add_argument("--batch", nargs="+", help="Parameter sweep: param value1 value2 ...")
+
     args = parser.parse_args()
+    params = vars(args)
 
 
-    run_simulation(
-        V_run=args.V_run,
-        dt=args.dt,
-        N_steps=args.N_steps,
-        N_traj=args.N_traj,
-        x0=args.x0,
-        T=args.T,
-        v0=args.v0,
-        alpha_tumbling=args.alpha_tumbling,
-        alpha_potential=args.alpha_potential,
-        omega0=args.omega0) 
+    # if batch mode
+    if args.batch is not None:
+        param_to_vary = args.batch[0]
+        values = list(map(float, args.batch[1:]))
+
+        # remove batch key from base params to pass it to run_batch
+        params.pop("batch")
+
+        #call run_batch with the param to vary, the values to simulate, and the rest of the 
+        #params
+        run_batch(param_to_vary, values, **params)
+
+    # else, single simulation
+    else:
+        run_simulation(**params)
