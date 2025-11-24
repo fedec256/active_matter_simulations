@@ -86,6 +86,11 @@ def simulate_rt_ou_vectorized_with_potential(
 
         trajectories[:, t] = x
 
+        final_time = n_steps * dt #final time of simulation
+        nan_mask = np.isnan(first_passage_times) #those who did'nt escape
+        first_passage_times[nan_mask] = final_time+dt #a time of escape greather than final
+        #time tells you the particle never escaped. 
+
     return trajectories, first_passage_times, escaped
 
 def run_simulation(**params
@@ -117,7 +122,7 @@ def run_simulation(**params
 
     #Simulation!! A single simulation, because ram issues
     #Maybe parallel can be used in the future? Or a function that calls this one several times
-    trajectories, scape_times, escaped_particles = simulate_rt_ou_vectorized_with_potential(N_traj, N_steps, V_run, dt, x0, T, v0, alpha_tumbling, alpha_potential, omega0)
+    trajectories, escape_times, escaped_particles = simulate_rt_ou_vectorized_with_potential(N_traj, N_steps, V_run, dt, x0, T, v0, alpha_tumbling, alpha_potential, omega0)
     msd_t = np.mean((trajectories - x0)**2, axis=0)
     time = np.arange(trajectories.shape[1]) * dt
 
@@ -125,7 +130,7 @@ def run_simulation(**params
 #            trajectories = trajectories, #this was making the npz of huge size, don't save
             msd_t = msd_t,
             time = time,
-            scape_times = scape_times,
+            escape_times = escape_times,
             escaped_particles = escaped_particles,
             params_keys = np.array(list(params.keys())),
             params_values = np.array(list(params.values()))
