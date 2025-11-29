@@ -23,8 +23,8 @@ def ornstein_uhlenbeck_steps_numba(n, deltaT, T, v0, alpha):
 @jit(nopython=True)
 def simulate_rt_ou_vectorized_with_potential(
     n_traj, n_steps, v_run, dt, x0,
-    T_ou, v0_ou, alpha_ou,
-    alpha_force, omega0):
+    T_ou, v0_ou, alpha,
+    a, b):
     """
     TODO
     """
@@ -38,7 +38,7 @@ def simulate_rt_ou_vectorized_with_potential(
     f_dt = float(dt)
     f_T_ou = float(T_ou)
     f_v0_ou = float(v0_ou)
-    f_alpha_ou = float(alpha_ou)
+    f_alpha_ou = float(alpha)
 
     sqrt_term_ou = np.sqrt(2.0 * f_dt / f_T_ou)
     dt_over_T = f_dt / f_T_ou
@@ -48,8 +48,8 @@ def simulate_rt_ou_vectorized_with_potential(
     escaped = np.zeros(n_traj, dtype=np.bool_)
 
     barrier_x = 0.0
-    if alpha_force > 0:
-        barrier_x = omega0 / (3.0 * alpha_force)
+    if a > 0:
+        barrier_x = b / (3.0 * a)
 
     frozen_positions = np.zeros(n_traj)
 
@@ -61,7 +61,7 @@ def simulate_rt_ou_vectorized_with_potential(
         X_ou = X_ou - (X_ou * dt_over_T) + (sqrt_term_ou * eta_ou)
         v_rate_t = f_v0_ou * np.exp(f_alpha_ou * X_ou)
 
-        force_potential = -x_old * (omega0 - 3 * alpha_force * (np.abs(x_old)))
+        force_potential = -x_old * (b - 3 * a * (np.abs(x_old)))
 
         x_new = x_old + v * f_dt + force_potential * f_dt
 
@@ -116,13 +116,13 @@ def run_simulation(**params
     x0 = params["x0"] #starting position
     T = params["T"] #memory time
     v0 = params["v0"] #initial tumbling rate
-    alpha_tumbling = params["alpha_tumbling"] #the alpha parameter controlling the change in tumbling rate (ornstein-uhlenbeck) 
-    alpha_potential = params["alpha_potential"] #the alpha parameter to tune the height of the barrier
-    omega0 = params["omega0"] #the curvature of the potential
+    alpha = params["alpha"] #the alpha parameter controlling the change in tumbling rate (ornstein-uhlenbeck) 
+    a = params["a"] #the alpha parameter to tune the height of the barrier
+    b = params["b"] #the curvature of the potential
 
     #Simulation!! A single simulation, because ram issues
     #Maybe parallel can be used in the future? Or a function that calls this one several times
-    trajectories, escape_times, escaped_particles = simulate_rt_ou_vectorized_with_potential(N_traj, N_steps, V_run, dt, x0, T, v0, alpha_tumbling, alpha_potential, omega0)
+    trajectories, escape_times, escaped_particles = simulate_rt_ou_vectorized_with_potential(N_traj, N_steps, V_run, dt, x0, T, v0, alpha, a, b)
     msd_t = np.mean((trajectories - x0)**2, axis=0)
     time = np.arange(trajectories.shape[1]) * dt
 
@@ -135,10 +135,6 @@ def run_simulation(**params
             params_keys = np.array(list(params.keys())),
             params_values = np.array(list(params.values()))
     )
-#            params=np.array([
-#                    N_traj, N_steps, V_run, dt, x0,
-#                     T, v0, alpha_tumbling, alpha_potential, omega0
-#                                                                    ]))
     print(f"Saved to {file_to_save}")
     
 def run_batch(param_name, values, **base_params):
@@ -162,9 +158,9 @@ if __name__ == "__main__":
     parser.add_argument("--x0", type=float, default=0.0)
     parser.add_argument("--T", type=float, default=1.0)
     parser.add_argument("--v0", type=float, default=0.1)
-    parser.add_argument("--alpha_tumbling", type=float, default=0.5)
-    parser.add_argument("--alpha_potential", type=float, default=0.01)
-    parser.add_argument("--omega0", type=float, default=1.0)
+    parser.add_argument("--alpha", type=float, default=0.5)
+    parser.add_argument("--a", type=float, default=0.01)
+    parser.add_argument("--b", type=float, default=1.0)
 
     #batch parameters (vary one param at a time)
     parser.add_argument("--batch", nargs="+", help="Parameter sweep: param value1 value2 ...")
